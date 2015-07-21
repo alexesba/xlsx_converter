@@ -17,7 +17,7 @@ module Xlsx
     end
 
     def to_csv
-      self.class.to_json(@file, self)
+      self.class.to_csv(@file, self)
     end
 
     def build_file_name(string, format=".csv")
@@ -39,12 +39,11 @@ module Xlsx
       def file_content_to_csv(file, obj = self.new)
 
         xlsx = SimpleXlsxReader.open(file)
-
         xlsx.sheets.each do |sheet|
           file_name = obj.build_file_name(sheet.name)
           File.open(file_name,  'w') do |f|
             sheet.rows.each do |row|
-              f.write "#{row.join(',')}\n"
+              f.write "#{row.map{|field| field.to_s.gsub('"', '""')}.join("\t")}\n"
             end
           end
         end
@@ -54,10 +53,10 @@ module Xlsx
       end
 
       def csv_files_to_json(sheets_names, obj)
+
         sheets_names.each do |sheet_name|
           associated_data = build_hash_object(sheet_name, obj)
           json_content    = build_json_data(associated_data)
-
           File.open(obj.build_file_name(sheet_name, '.json'), 'w') do |csv|
             csv.write json_content
           end
@@ -71,14 +70,15 @@ module Xlsx
       end
 
       def build_hash_object(sheet_name, obj)
-        CSV.foreach(obj.build_file_name(sheet_name), headers: true).map do |row|
+        CSV.foreach(obj.build_file_name(sheet_name), headers: true, col_sep: "\t", quote_char:"\0", force_quotes: true).map do |row|
+          # binding.pry if sheet_name == "Providers"
           [ row[row.headers.first], associate_header_values(row)]
         end.to_h
       end
 
       def associate_header_values(row)
-        collection = headers(row).map{ |header| { header => row[header] } }
-        collection.select!{|option| option.keys.any? }
+        collection = headers(row).map{ |header| { header.to_s.gsub('.0', '') => row[header] } }
+        collection.select {|option| option.keys.any? && option.values.any? }
       end
 
       def headers(row)
