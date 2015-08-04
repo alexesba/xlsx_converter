@@ -1,7 +1,6 @@
 require 'simple_xlsx_reader'
 require 'csv'
 require 'json'
-require 'pry'
 
 module Xlsx
   class Convert
@@ -43,7 +42,7 @@ module Xlsx
           file_name = obj.build_file_name(sheet.name)
           File.open(file_name,  'w') do |f|
             sheet.rows.each do |row|
-              f.write "#{row.map{|field| field.to_s.gsub('"', '""')}.join("\t")}\n"
+              f.write "#{row.map{|field| field.to_s.gsub('"', '""').gsub(/\n/, ' ').gsub('  ', ' ')}.join("||")}\n"
             end
           end
         end
@@ -70,15 +69,21 @@ module Xlsx
       end
 
       def build_hash_object(sheet_name, obj)
-        CSV.foreach(obj.build_file_name(sheet_name), headers: true, col_sep: "\t", quote_char:"\0", force_quotes: true).map do |row|
-          # binding.pry if sheet_name == "Providers"
-          [ row[row.headers.first], associate_header_values(row)]
-        end.to_h
+        CSV.foreach(obj.build_file_name(sheet_name), headers: true, col_sep: "||", quote_char:"\0", force_quotes: true).map do |row|
+          header = normalize_header(row.headers.first)
+          header_name = normalize_header(row[header])
+          [ header_name, associate_header_values(row)] unless header_name.empty?
+        end.compact.to_h
+      end
+
+      def normalize_header(header)
+        header.to_s.gsub('.0', '').strip
       end
 
       def associate_header_values(row)
-        collection = headers(row).map{ |header| { header.to_s.gsub('.0', '') => row[header] } }
-        collection.select {|option| option.keys.any? && option.values.any? }
+        collection = headers(row).map{ |header| { normalize_header(header) => row[header] } }
+        collection = collection.select {|option| option.keys.any? && option.values.any? }
+        collection.reduce({}) {|h,pairs| pairs.each {|k,v| h[normalize_header(k)] =  v}; h}
       end
 
       def headers(row)
